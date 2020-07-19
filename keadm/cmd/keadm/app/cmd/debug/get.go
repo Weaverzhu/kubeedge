@@ -25,6 +25,7 @@ import (
 const DefaultDbPath = "/var/lib/kubeedge/edgecore.db"
 
 var allNamespaces bool
+var availableResourceTypes map[string]bool
 
 // NewCmdDebugGet represents the debug get command
 func NewCmdDebugGet(out io.Writer) *cobra.Command {
@@ -166,6 +167,19 @@ func initDb(dbPath string) {
 	}
 }
 
+func distributeByResourceType(metas *[]dao.Meta) map[string][]dao.Meta {
+	resultMap := make(map[string][]dao.Meta)
+	for k := range availableResourceTypes {
+		resultMap[k] = make([]dao.Meta, 0)
+	}
+
+	for _, v := range *metas {
+		resultMap[v.Type] = append(resultMap[v.Type], v)
+	}
+
+	return resultMap
+}
+
 func printResult(metas *[]dao.Meta, out io.Writer, cmd *cobra.Command) error {
 	const flag = "output"
 	of, err := cmd.Flags().GetString(flag)
@@ -242,10 +256,13 @@ func printResult(metas *[]dao.Meta, out io.Writer, cmd *cobra.Command) error {
 	}
 	switch of {
 	case "":
-		fmt.Fprintln(out, "KEY")
-		for _, v := range *metas {
-			fmt.Fprintf(out, "%s\n", v.Key)
+		resultByType := distributeByResourceType(metas)
+		podMetas := resultByType["pod"]
+		podInfo, err := MetaToPodInfo(&podMetas)
+		if err != nil {
+			return err
 		}
+		OutputPodInfo(podInfo, out)
 	case "json":
 		var byteContentIndented bytes.Buffer
 
