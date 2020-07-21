@@ -6,6 +6,13 @@ import (
 	"io"
 	"text/tabwriter"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/cli-runtime/pkg/printers"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/kubectl/pkg/cmd/get"
+
 	"github.com/kubeedge/kubeedge/edge/pkg/metamanager/dao"
 )
 
@@ -24,6 +31,55 @@ type PodInfo struct {
 	ready    string
 	ip       string
 	node     string
+}
+
+func toPrinter(o get.GetOptions, mapping *meta.RESTMapping, outputObjects *bool, withNamespace bool, withKind bool) (printers.ResourcePrinterFunc, error) {
+	// make a new copy of current flags / opts before mutating
+	printFlags := o.PrintFlags.Copy()
+
+	if mapping != nil {
+		// if !cmdSpecifiesOutputFmt(cmd) && o.PrintWithOpenAPICols {
+		// 	if apiSchema, err := f.OpenAPISchema(); err == nil {
+		// 		printFlags.UseOpenAPIColumns(apiSchema, mapping)
+		// 	}
+		// }
+		printFlags.SetKind(mapping.GroupVersionKind.GroupKind())
+	}
+	if withNamespace {
+		printFlags.EnsureWithNamespace()
+	}
+	if withKind {
+		printFlags.EnsureWithKind()
+	}
+
+	printer, err := printFlags.ToPrinter()
+	if err != nil {
+		return nil, err
+	}
+	printer, err = printers.NewTypeSetter(scheme.Scheme).WrapToPrinter(printer, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// if o.Sort {
+	// 	printer = &SortingPrinter{Delegate: printer, SortField: sortBy}
+	// }
+	// if outputObjects != nil {
+	// 	printer = &skipPrinter{delegate: printer, output: outputObjects}
+	// }
+	// if o.ServerPrint {
+	// 	printer = &TablePrinter{Delegate: printer}
+	// }
+	return printer.PrintObj, nil
+}
+
+// NewRestMapper returns a default RESTMapper
+func NewRestMapper() meta.RESTMapper {
+	restMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{
+		metav1.SchemeGroupVersion,
+	})
+
+	return restMapper
 }
 
 func NewTabWriter(out io.Writer) *tabwriter.Writer {
