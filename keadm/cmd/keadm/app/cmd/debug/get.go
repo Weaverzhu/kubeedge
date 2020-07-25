@@ -16,7 +16,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/klog"
+	"k8s.io/kubectl/pkg/cmd/get"
 
 	"github.com/kubeedge/kubeedge/edge/pkg/common/dbm"
 	"github.com/kubeedge/kubeedge/edge/pkg/metamanager/dao"
@@ -29,6 +31,12 @@ var availableResourceTypes map[string]bool
 
 // NewCmdDebugGet represents the debug get command
 func NewCmdDebugGet(out io.Writer) *cobra.Command {
+	o := get.NewGetOptions("debug", genericclioptions.IOStreams{
+		In:     os.Stdin,
+		Out:    os.Stdout,
+		ErrOut: os.Stderr,
+	})
+
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "Get and format data of available resource types in the local database of the edge node",
@@ -67,12 +75,12 @@ func NewCmdDebugGet(out io.Writer) *cobra.Command {
 				return err
 			}
 
-			return printResult(result, out, cmd)
+			return printResult(result, out, cmd, o)
 		},
 	}
-
+	o.PrintFlags.AddFlags(cmd)
 	cmd.Flags().StringP("input", "i", DefaultDbPath, "Indicate the edge node database path, the default path is `/var/lib/kubeedge/edgecore.db`")
-	cmd.Flags().StringP("output", "o", "", "Indicate the output format. Currently supports formats such as yaml|json|wide")
+	// cmd.Flags().StringP("output", "o", "", "Indicate the output format. Currently supports formats such as yaml|json|wide")
 	cmd.Flags().StringP("namespace", "n", "default", "List the requested object(s) in specified namespaces")
 	cmd.Flags().BoolVarP(&allNamespaces, "all-namespaces", "A", false, "List the requested object(s) across all namespaces")
 
@@ -180,7 +188,7 @@ func distributeByResourceType(metas *[]dao.Meta) map[string][]dao.Meta {
 	return resultMap
 }
 
-func printResult(metas *[]dao.Meta, out io.Writer, cmd *cobra.Command) error {
+func printResult(metas *[]dao.Meta, out io.Writer, cmd *cobra.Command, o *get.GetOptions) error {
 	const flag = "output"
 	of, err := cmd.Flags().GetString(flag)
 	if err != nil {
@@ -256,13 +264,17 @@ func printResult(metas *[]dao.Meta, out io.Writer, cmd *cobra.Command) error {
 	}
 	switch of {
 	case "":
-		resultByType := distributeByResourceType(metas)
-		podMetas := resultByType["pod"]
-		podInfo, err := MetaToPodInfo(&podMetas)
+		err := PrintWithKubectl(metas, o)
 		if err != nil {
 			return err
 		}
-		OutputPodInfo(podInfo, out)
+		// resultByType := distributeByResourceType(metas)
+		// podMetas := resultByType["pod"]
+		// podInfo, err := MetaToPodInfo(&podMetas)
+		// if err != nil {
+		// 	return err
+		// }
+		// OutputPodInfo(podInfo, out)
 	case "json":
 		var byteContentIndented bytes.Buffer
 
